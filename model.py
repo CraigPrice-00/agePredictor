@@ -3,9 +3,6 @@ import torchvision.models as models
 
 
 def build_model():
-    """
-    EfficientNet-B0 regressor that outputs a normalized age in [0, 1].
-    """
     model = models.efficientnet_b0(weights=models.EfficientNet_B0_Weights.DEFAULT)
 
     in_features = model.classifier[1].in_features

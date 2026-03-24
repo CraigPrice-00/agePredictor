@@ -1,9 +1,7 @@
-# train.py
-
 import os
-import math
 import pandas as pd
 import torch
+import numpy as np
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision import transforms
@@ -18,8 +16,10 @@ IMAGE_SIZE = 128
 BATCH_SIZE = 64
 EPOCHS = 10
 LR = 3e-4
-MAX_AGE = 100.0  # must match your dataset normalization
-NUM_WORKERS = 4 # Windows: start at 0; you can try 2/4 later
+MIN_AGE = 1
+MAX_AGE = 119
+AGE_RANGE = MAX_AGE - MIN_AGE
+NUM_WORKERS = 4
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 PIN_MEMORY = True
 
@@ -44,38 +44,67 @@ def get_transforms():
     ])
     return train_tf, val_tf
 
+def denormalize_age(age_norm):
+    return age_norm * AGE_RANGE + MIN_AGE
 
-def mae_years(pred_norm, y_norm):
-    #IDK exactly what this function does, just what they said to use
-    #to compare performance
+def evaluate_metrics(model, loader):
+    model.eval()
 
-    #MAE - Median Absolute Error
-    """
-    pred_norm, y_norm: tensors in normalized age space [0,1]
-    returns MAE in years (float)
-    """
-    pred_years = pred_norm * MAX_AGE
-    y_years = y_norm * MAX_AGE
-    return torch.mean(torch.abs(pred_years - y_years)).item()
+    errors = []
 
+    with torch.no_grad():
+        for images, ages in tqdm(loader, desc="eval"):
+            images = images.to(DEVICE, non_blocking=True)
+            ages = ages.to(DEVICE, non_blocking=True).unsqueeze(1)
+
+            preds = model(images)
+
+            pred_years = preds * AGE_RANGE + MIN_AGE
+            true_years = ages * AGE_RANGE + MIN_AGE
+
+            batch_errors = (pred_years - true_years).cpu().numpy().flatten()
+            errors.extend(batch_errors)
+
+    errors = np.array(errors)
+
+    mae = np.mean(np.abs(errors))
+    rmse = np.sqrt(np.mean(errors ** 2))
+    medae = np.median(np.abs(errors))
+    bias = np.mean(errors)              # positive = overpredicting
+    std_err = np.std(errors)
+    max_err = np.max(np.abs(errors))
+
+    return {
+        "mae": mae,
+        "rmse": rmse,
+        "median_ae": medae,
+        "bias": bias,
+        "std_error": std_err,
+        "max_error": max_err,
+        "n": len(errors),
+    }
 
 def run():
     print("Device:", DEVICE)
 
     # Read and split CSV
     df = pd.read_csv(CSV_PATH)
-    train_df, val_df = train_test_split(df, test_size=0.1, random_state=42)
+    train_df, temp_df = train_test_split(df, test_size=0.1, random_state=42)
+    val_df, test_df = train_test_split(temp_df, test_size=0.5, random_state=42)
 
     # Write temp split files (simple + reliable)
     train_csv = "_train_split.csv"
     val_csv = "_val_split.csv"
+    test_csv = "_test_split.csv"
     train_df.to_csv(train_csv, index=False)
     val_df.to_csv(val_csv, index=False)
+    test_df.to_csv(test_csv, index=False)
 
     train_tf, val_tf = get_transforms()
 
-    train_ds = AgeDataset(train_csv, transform=train_tf, max_age=MAX_AGE)
-    val_ds = AgeDataset(val_csv, transform=val_tf, max_age=MAX_AGE)
+    train_ds = AgeDataset(train_csv, transform=train_tf)
+    val_ds = AgeDataset(val_csv, transform=val_tf)
+    test_ds = AgeDataset(test_csv, transform=val_tf)
 
     train_loader = DataLoader(
         train_ds, batch_size=BATCH_SIZE, shuffle=True,
@@ -83,6 +112,10 @@ def run():
     )
     val_loader = DataLoader(
         val_ds, batch_size=BATCH_SIZE, shuffle=False,
+        num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY
+    )
+    test_loader = DataLoader(
+        test_ds, batch_size=BATCH_SIZE, shuffle=False,
         num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY
     )
 
@@ -137,7 +170,10 @@ def run():
 
                 preds = model(images)
 
-                abs_err_sum_years += torch.sum(torch.abs((preds * MAX_AGE) - (ages * MAX_AGE))).item()
+                pred_years = preds * AGE_RANGE + MIN_AGE
+                true_years = ages * AGE_RANGE + MIN_AGE
+                abs_err_sum_years += torch.sum(torch.abs(pred_years - true_years)).item()
+
                 n += ages.size(0)
 
         val_mae = abs_err_sum_years / max(1, n)
@@ -152,6 +188,7 @@ def run():
                     "val_mae": val_mae,
                     "image_size": IMAGE_SIZE,
                     "max_age": MAX_AGE,
+                    "min_age": MIN_AGE,
                 },
                 SAVE_PATH
             )
@@ -160,11 +197,24 @@ def run():
         scheduler.step()
         print("LR:", scheduler.get_last_lr()[0])
 
+    print("Finished Training, running final test evaluation")
+
+    checkpoint = torch.load(SAVE_PATH, map_location=DEVICE)
+    model.load_state_dict(checkpoint["model_state_dict"])
+
+    metrics = evaluate_metrics(model, test_loader)
+
+    print(f"Test MAE (years): {metrics['mae']:.2f}")
+    print(f"Test RMSE (years): {metrics['rmse']:.2f}")
+    print(f"Test Median AE (years): {metrics['median_ae']:.2f}")
+    print(f"Test Bias (years): {metrics['bias']:.2f}")
+    print(f"Test Std Error (years): {metrics['std_error']:.2f}")
+    print(f"Test Max Error (years): {metrics['max_error']:.2f}")
+    print(f"Test Samples: {metrics['n']}")
+
     os.remove(train_csv)
     os.remove(val_csv)
-
-    print("\nDone.")
-    print(f"Best Val MAE (years): {best_val_mae:.2f}")
+    os.remove(test_csv)
 
 
 if __name__ == "__main__":

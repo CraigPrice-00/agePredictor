@@ -2,21 +2,21 @@ import torch
 from torch.utils.data import Dataset
 from PIL import Image
 import pandas as pd
+import os
 
 class AgeDataset(Dataset):
-    def __init__(self, csv, transform=None, max_age=100):
+    def __init__(self, csv, transform=None):
         self.df = pd.read_csv(csv)
         self.transform = transform
-        self.max_age = max_age
 
     def __len__(self):
         return len(self.df)
 
     def __getitem__(self, idx):
-        img_path = self.df.iloc[idx]['file_path']
+        img_path = os.path.normpath(self.df.iloc[idx]['file_path'])
         age = float(self.df.iloc[idx]['age'])
 
-        age = age / self.max_age
+        age = (age - 1) / (119 - 1)
 
         image = Image.open(img_path).convert('RGB')
 
