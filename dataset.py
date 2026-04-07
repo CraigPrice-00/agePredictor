@@ -16,7 +16,7 @@ class AgeDataset(Dataset):
         img_path = os.path.normpath(self.df.iloc[idx]['file_path'])
         age = float(self.df.iloc[idx]['age'])
 
-        age = (age - 1) / (119 - 1)
+        age = (age - 5) / (70 - 5)
 
         image = Image.open(img_path).convert('RGB')
 
