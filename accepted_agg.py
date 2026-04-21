@@ -5,13 +5,11 @@ balancer = "./balancer"
 population = "/population/"
 uniform = "/uniform/"
 
-aggregation_directories = [balancer + uniform + "uniform70real",
-                           balancer + uniform + "uniform100real",
-                           balancer + population + "population70real",
-                           balancer + population + "population100real",
-                           balancer + "/final/real/uniform_split/test",
-                           balancer + "/final/real/population_split/test"]
-save_names = ["uniform70.csv", "uniform100.csv", "population70.csv", "population100.csv", "uniformTest.csv", "population_test.csv"]
+aggregation_directories = [balancer + uniform + "samUniform80real",
+                           balancer + uniform + "styleganUniform80real",
+                           balancer + population + "styleganPopulation80real",
+                           balancer + population + "samPopulation80real"]
+save_names = ["samUniform80.csv", "styleganUniform80.csv", "styleganPopulation80.csv", "samPopulation80.csv"]
 
 minAge = 5
 maxAge = 70

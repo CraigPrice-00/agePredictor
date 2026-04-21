@@ -10,7 +10,6 @@ from tqdm import tqdm
 from dataset import AgeDataset
 from model import build_model
 
-CSV_PATH = "./synthetic_csv/uniform100.csv"
 IMAGE_SIZE = 128
 BATCH_SIZE = 64
 EPOCHS = 10
@@ -22,7 +21,8 @@ NUM_WORKERS = 4
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 PIN_MEMORY = True
 
-SAVE_PATH = "./crap.pth"
+CSV_PATH = "./synthetic_csv/styleganUniform80.csv"
+SAVE_PATH = "best_models_synth/styleganUniform80.pth"
 
 def get_transforms():
     train_tf = transforms.Compose([
